@@ -57,9 +57,12 @@ jobs:
           
           Write-Host "Found coverage file at: $coverageFile"
           
-          # Extract coverage from line-rate="([0-9.]+)"
-          $coverage = Select-String -Path $coverageFile -Pattern 'line-rate="([\d\.]+)"' | ForEach-Object { $_.Matches.Groups[1].Value }
-          $coveragePercent = [math]::Round([double]$coverage * 100, 2)
+          # Read the XML file content
+          [xml]$coverageXml = Get-Content -Path $coverageFile
+          
+          # Get the line-rate attribute directly from the XML
+          $coverage = [double]$coverageXml.coverage.'line-rate'
+          $coveragePercent = [math]::Round($coverage * 100, 2)
           Write-Host "📊 Test Coverage: $coveragePercent%"
           
           if ($coveragePercent -lt 100) {
