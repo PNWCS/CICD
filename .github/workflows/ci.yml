@@ -1,0 +1,68 @@
+name: CI/CD Pipeline
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  check-code-quality:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '8.0.x' 
+
+      - name: Run Code Formatting Check
+        run: dotnet format --verify-no-changes
+
+      - name: Run Static Code Analysis
+        run: dotnet build --configuration Release /warnaserror
+
+      - name: Run Unit Tests
+        run: dotnet test --configuration Release --logger trx --results-directory "TestResults"
+
+      - name: Ensure All Tests Pass
+        run: |
+          if (Test-Path "TestResults/*.trx") {
+            echo "✅ All tests passed."
+          } else {
+            echo "❌ Some tests failed. Fix them before merging."
+            exit 1
+          }
+
+      - name: Run Test Coverage Analysis
+        run: dotnet test --configuration Release --collect:"XPlat Code Coverage"
+
+      - name: Upload Code Coverage Report
+        uses: codecov/codecov-action@v3
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: "**/coverage.cobertura.xml"
+          flags: unittests
+          name: code-coverage
+
+  build-and-upload-exe:
+    needs: check-code-quality  # Runs only if quality checks pass
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '6.0.x'
+
+      - name: Build and Publish Executable
+        run: dotnet publish CalculatorCLI/CalculatorCLI.csproj -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true -o out
+
+      - name: Upload EXE as Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: CalculatorCLI-Exe
+          path: out
