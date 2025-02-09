@@ -39,21 +39,23 @@ jobs:
         run: dotnet test --configuration Release --collect:"XPlat Code Coverage"
 
       - name: Extract and Verify Code Coverage
-        run: |
-          $coverageFile = Get-ChildItem -Path TestResults -Recurse -Filter "coverage.cobertura.xml" | Select-Object -First 1
-          if (-not $coverageFile) {
-            echo "❌ Coverage report not found!"
-            exit 1
-          }
-          $coverage = Select-String -Path $coverageFile.FullName -Pattern 'line-rate="([\d\.]+)"' | ForEach-Object { $_.Matches.Groups[1].Value }
-          $coveragePercent = [math]::Round($coverage * 100, 2)
-          echo "📊 Test Coverage: $coveragePercent%"
-          if ($coveragePercent -lt 100) {
-            echo "❌ Test coverage is below 100%! Required: 100%, Found: $coveragePercent%"
-            exit 1
-          } else {
-            echo "✅ Test coverage is 100%! Proceeding..."
-          }
+  shell: pwsh
+  run: |
+    $coverageFile = Get-ChildItem -Path TestResults -Recurse -Filter "coverage.cobertura.xml" | Select-Object -First 1
+    if (-not $coverageFile) {
+      echo "❌ Coverage report not found! Check the test execution and paths."
+      exit 1
+    }
+    $coverage = Select-String -Path $coverageFile.FullName -Pattern 'line-rate="([\d\.]+)"' | ForEach-Object { $_.Matches.Groups[1].Value }
+    $coveragePercent = [math]::Round([double]$coverage * 100, 2)
+    echo "📊 Test Coverage: $coveragePercent%"
+    if ($coveragePercent -lt 100) {
+      echo "❌ Test coverage is below 100%! Required: 100%, Found: $coveragePercent%"
+      exit 1
+    } else {
+      echo "✅ Test coverage is 100%! Proceeding..."
+    }
+
 
       - name: Upload Code Coverage Report
         uses: codecov/codecov-action@v3
