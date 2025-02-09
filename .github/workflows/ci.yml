@@ -15,7 +15,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '8.0.x'  # Adjust if using a different .NET version
 
       - name: Run Code Formatting Check
         run: dotnet format --verify-no-changes
@@ -23,45 +23,46 @@ jobs:
       - name: Run Static Code Analysis
         run: dotnet build --configuration Release /warnaserror
 
-      - name: Run Unit Tests
-        run: dotnet test --configuration Release --logger trx --results-directory "TestResults"
+      - name: Run Tests with Coverage
+        run: |
+          dotnet test --configuration Release ^
+            --logger "trx;LogFileName=TestResults.trx" ^
+            --results-directory "TestResults" ^
+            --collect:"XPlat Code Coverage" ^
+            /p:CollectCoverage=true ^
+            /p:CoverletOutputFormat=cobertura ^
+            /p:CoverletOutput="TestResults/coverage"
 
-      - name: Ensure All Tests Pass
+      - name: Check Test Results
         shell: pwsh
         run: |
-          if (Test-Path "TestResults/*.trx") {
-            echo "✅ All tests passed."
-          } else {
-            echo "❌ Some tests failed. Fix them before merging."
+          if (!(Test-Path "TestResults/TestResults.trx")) {
+            Write-Host "❌ Some tests failed or test results file is missing!"
             exit 1
           }
+          Write-Host "✅ All tests ran successfully."
 
-      - name: Run Test Coverage Analysis
-        run: dotnet test --configuration Release --collect:"XPlat Code Coverage"
-
-      - name: Extract and Verify Code Coverage
+      - name: Enforce 100% Test Coverage
         shell: pwsh
         run: |
-          # Find coverage report dynamically
-          $coverageFile = Get-ChildItem -Path TestResults -Recurse -Filter "coverage.cobertura.xml" | Select-Object -First 1
+          $coverageFile = "TestResults/coverage.cobertura.xml"
           
-          if (-not $coverageFile) {
-            echo "❌ Coverage report not found! Check the test execution and paths."
+          if (-not (Test-Path $coverageFile)) {
+            Write-Host "❌ Coverage report not found at $coverageFile!"
             exit 1
           }
 
-          # Extract line-rate (coverage percentage)
-          $coverage = Select-String -Path $coverageFile.FullName -Pattern 'line-rate="([\d\.]+)"' | ForEach-Object { $_.Matches.Groups[1].Value }
+          # Extract coverage from line-rate="0.95" etc.
+          $coverage = Select-String -Path $coverageFile -Pattern 'line-rate="([\d\.]+)"' | ForEach-Object { $_.Matches.Groups[1].Value }
           $coveragePercent = [math]::Round([double]$coverage * 100, 2)
 
-          echo "📊 Test Coverage: $coveragePercent%"
+          Write-Host "📊 Test Coverage: $coveragePercent%"
 
-          # Enforce 100% test coverage
           if ($coveragePercent -lt 100) {
-            echo "❌ Test coverage is below 100%! Required: 100%, Found: $coveragePercent%"
+            Write-Host "❌ Test coverage is below 100%! Required: 100%, Found: $coveragePercent%"
             exit 1
           } else {
-            echo "✅ Test coverage is 100%! Proceeding..."
+            Write-Host "✅ Test coverage is 100%! Proceeding..."
           }
 
       - name: Upload Code Coverage Report
@@ -73,7 +74,7 @@ jobs:
           name: code-coverage
 
   build-and-upload-exe:
-    needs: check-code-quality  # Runs only if quality checks pass
+    needs: check-code-quality  # Only runs if the "check-code-quality" job passes
     runs-on: windows-latest
     steps:
       - name: Checkout Code
@@ -82,12 +83,12 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '8.0.x'  # Adjust if needed
 
       - name: Build and Publish Executable
         run: dotnet publish CalculatorCLI/CalculatorCLI.csproj -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true -o out
 
-      - name: Upload EXE as Artifact
+      - name: Upload EXE Artifact
         uses: actions/upload-artifact@v3
         with:
           name: CalculatorCLI-Exe
