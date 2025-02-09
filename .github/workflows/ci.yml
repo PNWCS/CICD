@@ -8,6 +8,7 @@ on:
 jobs:
   check-code-quality:
     runs-on: windows-latest
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -15,7 +16,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: '8.0.x'  # Adjust if using a different .NET version
+          dotnet-version: '8.0.x'  # Adjust if you're using a different .NET version
 
       - name: Run Code Formatting Check
         run: dotnet format --verify-no-changes
@@ -23,16 +24,16 @@ jobs:
       - name: Run Static Code Analysis
         run: dotnet build --configuration Release /warnaserror
 
-- name: Run Tests with Coverage
-  shell: pwsh
-  run: |
-    dotnet test --configuration Release `
-      --logger "trx;LogFileName=TestResults.trx" `
-      --results-directory "TestResults" `
-      --collect:"XPlat Code Coverage" `
-      /p:CollectCoverage=true `
-      /p:CoverletOutputFormat=cobertura `
-      /p:CoverletOutput="TestResults/coverage"
+      - name: Run Tests with Coverage
+        shell: pwsh
+        run: |
+          dotnet test --configuration Release `
+            --logger "trx;LogFileName=TestResults.trx" `
+            --results-directory "TestResults" `
+            --collect:"XPlat Code Coverage" `
+            /p:CollectCoverage=true `
+            /p:CoverletOutputFormat=cobertura `
+            /p:CoverletOutput="TestResults/coverage"
 
       - name: Check Test Results
         shell: pwsh
@@ -53,7 +54,7 @@ jobs:
             exit 1
           }
 
-          # Extract coverage from line-rate="0.95" etc.
+          # Extract coverage from line-rate="([0-9.]+)"
           $coverage = Select-String -Path $coverageFile -Pattern 'line-rate="([\d\.]+)"' | ForEach-Object { $_.Matches.Groups[1].Value }
           $coveragePercent = [math]::Round([double]$coverage * 100, 2)
 
@@ -69,14 +70,15 @@ jobs:
       - name: Upload Code Coverage Report
         uses: codecov/codecov-action@v3
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
+          token: ${{ secrets.CODECOV_TOKEN }}    # Only if using Codecov
           files: "**/coverage.cobertura.xml"
           flags: unittests
           name: code-coverage
 
   build-and-upload-exe:
-    needs: check-code-quality  # Only runs if the "check-code-quality" job passes
+    needs: check-code-quality  # Only runs if "check-code-quality" passes
     runs-on: windows-latest
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -84,12 +86,12 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: '8.0.x'  # Adjust if needed
+          dotnet-version: '8.0.x'
 
       - name: Build and Publish Executable
         run: dotnet publish CalculatorCLI/CalculatorCLI.csproj -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true -o out
 
-      - name: Upload EXE Artifact
+      - name: Upload EXE as Artifact
         uses: actions/upload-artifact@v3
         with:
           name: CalculatorCLI-Exe
