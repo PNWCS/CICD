@@ -1,4 +1,4 @@
-name: CI - Coverlet + ReportGenerator
+name: CI/CD Pipeline
 
 on:
   pull_request:
@@ -6,9 +6,8 @@ on:
       - main
 
 jobs:
-  build-and-test:
+  check-code-quality:
     runs-on: windows-latest
-
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -16,7 +15,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: '8.0.x'  # Adjust if you're using a different .NET version
+          dotnet-version: '8.0.x'  # Adjust if using a different .NET version
 
       - name: Run Code Formatting Check
         run: dotnet format --verify-no-changes
@@ -25,37 +24,71 @@ jobs:
         run: dotnet build --configuration Release /warnaserror
 
       - name: Run Tests with Coverage
-        run: |
-          dotnet test --configuration Release ^
-            --collect:"XPlat Code Coverage" ^
-            /p:CollectCoverage=true ^
-            /p:CoverletOutputFormat=cobertura ^
-            /p:CoverletOutput="TestResults/coverage"
-
-      - name: Install ReportGenerator
-        run: dotnet tool install --global dotnet-reportgenerator-globaltool
-
-      - name: Generate Coverage Report
         shell: pwsh
         run: |
-          reportgenerator `
-            -reports:TestResults/coverage.cobertura.xml `
-            -targetdir:TestResults/CoverageReport `
-            -reporttypes:"Html;TextSummary"
+          # Optional: Create folder to store results
+          New-Item -ItemType Directory -Force -Path "TestResults"
 
-      - name: Show Coverage Summary
+          dotnet test --configuration Release `
+            --logger "trx;LogFileName=TestResults.trx" `
+            --results-directory "TestResults" `
+            --collect:"XPlat Code Coverage" `
+            /p:CollectCoverage=true `
+            /p:CoverletOutputFormat=cobertura `
+            /p:CoverletOutput="./TestResults/"
+
+      - name: Check Test Results
         shell: pwsh
         run: |
-          if (Test-Path "TestResults/CoverageReport/Summary.txt") {
-            Write-Host "===== COVERAGE SUMMARY ====="
-            Get-Content "TestResults/CoverageReport/Summary.txt"
-          } else {
-            Write-Host "❌ Coverage summary not found!"
+          if (!(Test-Path "TestResults/TestResults.trx")) {
+            Write-Host "❌ Some tests failed or the test results file is missing!"
+            exit 1
+          }
+          Write-Host "✅ All tests ran successfully."
+
+      - name: Enforce 100% Test Coverage
+        shell: pwsh
+        run: |
+          $coverageFile = Get-ChildItem -Path "TestResults" -Recurse -Filter "coverage.cobertura.xml" | Select-Object -First 1 -ExpandProperty FullName
+
+          if (-not $coverageFile) {
+            Write-Host "❌ Coverage report not found!"
             exit 1
           }
 
-      - name: Upload Coverage HTML
-        uses: actions/upload-artifact@v3
+          Write-Host "Found coverage file at: $coverageFile"
+
+          # Read the XML
+          [xml]$coverageXml = Get-Content -Path $coverageFile
+          $coverage = [double]$coverageXml.coverage.'line-rate'
+          $coveragePercent = [math]::Round($coverage * 100, 2)
+          Write-Host "📊 Test Coverage: $coveragePercent%"
+
+          if ($coveragePercent -lt 100) {
+            Write-Host "❌ Test coverage is below 100%! Found: $coveragePercent%"
+            exit 1
+          } else {
+            Write-Host "✅ Test coverage is 100%. Proceeding..."
+          }
+
+  build-and-upload-exe:
+    # Only runs if the "check-code-quality" job passed
+    needs: check-code-quality
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
         with:
-          name: CoverageReport
-          path: TestResults/CoverageReport
+          dotnet-version: '8.0.x'
+
+      - name: Build and Publish Executable
+        run: dotnet publish CalculatorCLI/CalculatorCLI.csproj -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true -o out
+
+      - name: Upload EXE Artifact
+        uses: actions/upload-artifact@v4   # Updated version to avoid deprecation
+        with:
+          name: CalculatorCLI-Exe
+          path: out
