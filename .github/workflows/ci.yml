@@ -1,40 +1,42 @@
 name: CI/CD Pipeline
-
 on:
   pull_request:
     branches:
       - main
-
 jobs:
   check-code-quality:
     runs-on: windows-latest
-
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
-
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
         with:
           dotnet-version: '8.0.x'  # Adjust if you're using a different .NET version
-
       - name: Run Code Formatting Check
         run: dotnet format --verify-no-changes
-
       - name: Run Static Code Analysis
         run: dotnet build --configuration Release /warnaserror
-
       - name: Run Tests with Coverage
         shell: pwsh
         run: |
+          New-Item -ItemType Directory -Force -Path "TestResults"
           dotnet test --configuration Release `
             --logger "trx;LogFileName=TestResults.trx" `
             --results-directory "TestResults" `
             --collect:"XPlat Code Coverage" `
             /p:CollectCoverage=true `
             /p:CoverletOutputFormat=cobertura `
-            /p:CoverletOutput="TestResults/coverage"
-
+            /p:CoverletOutput="./TestResults/"
+      - name: Debug Test Results Directory
+        shell: pwsh
+        run: |
+          Write-Host "Listing contents of TestResults directory:"
+          if (Test-Path "TestResults") {
+            Get-ChildItem "TestResults" -Recurse
+          } else {
+            Write-Host "TestResults directory not found!"
+          }
       - name: Check Test Results
         shell: pwsh
         run: |
@@ -43,30 +45,29 @@ jobs:
             exit 1
           }
           Write-Host "✅ All tests ran successfully."
-
       - name: Enforce 100% Test Coverage
         shell: pwsh
         run: |
-          $coverageFile = "TestResults/coverage.cobertura.xml"
+          $coverageFile = Get-ChildItem -Path "TestResults" -Recurse -Filter "coverage.cobertura.xml" | Select-Object -First 1 -ExpandProperty FullName
           
-          if (-not (Test-Path $coverageFile)) {
-            Write-Host "❌ Coverage report not found at $coverageFile!"
+          if (-not $coverageFile) {
+            Write-Host "❌ Coverage report not found!"
             exit 1
           }
-
+          
+          Write-Host "Found coverage file at: $coverageFile"
+          
           # Extract coverage from line-rate="([0-9.]+)"
           $coverage = Select-String -Path $coverageFile -Pattern 'line-rate="([\d\.]+)"' | ForEach-Object { $_.Matches.Groups[1].Value }
           $coveragePercent = [math]::Round([double]$coverage * 100, 2)
-
           Write-Host "📊 Test Coverage: $coveragePercent%"
-
+          
           if ($coveragePercent -lt 100) {
             Write-Host "❌ Test coverage is below 100%! Required: 100%, Found: $coveragePercent%"
             exit 1
           } else {
             Write-Host "✅ Test coverage is 100%! Proceeding..."
           }
-
       - name: Upload Code Coverage Report
         uses: codecov/codecov-action@v3
         with:
@@ -74,23 +75,18 @@ jobs:
           files: "**/coverage.cobertura.xml"
           flags: unittests
           name: code-coverage
-
   build-and-upload-exe:
     needs: check-code-quality  # Only runs if "check-code-quality" passes
     runs-on: windows-latest
-
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
-
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
         with:
           dotnet-version: '8.0.x'
-
       - name: Build and Publish Executable
         run: dotnet publish CalculatorCLI/CalculatorCLI.csproj -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true -o out
-
       - name: Upload EXE as Artifact
         uses: actions/upload-artifact@v3
         with:
