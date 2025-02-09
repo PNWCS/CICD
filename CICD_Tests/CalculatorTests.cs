@@ -17,5 +17,11 @@ namespace CICD_Tests
             double result = Calculator.Divide(-10, -2);
             Assert.Equal(5, result);
         }
+
+        [Fact]
+        public void Divide_DivideByZeroException()
+        {
+            Assert.Throws<DivideByZeroException>(() => Calculator.Divide(1, 0));
+        }
     }
 }

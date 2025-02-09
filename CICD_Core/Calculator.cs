@@ -8,7 +8,7 @@ namespace CICD_Core
         {
             if (v2 == 0)
             {
-                throw new DivideByZeroException("Cannot divide by zero");
+                throw new DivideByZeroException("Cannot divide by 0");
             }
             return v1 / (double)v2;
         }
