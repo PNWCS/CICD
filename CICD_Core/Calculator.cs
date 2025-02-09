@@ -6,11 +6,12 @@ namespace CICD_Core
     {
         public static double Divide(int v1, int v2)
         {
+            int a = 3;
             if (v2 == 0)
             {
                 throw new DivideByZeroException("Cannot divide by zero");
             }
-            return v1 / (double)v2;
+            return v1/(double)v2;
         }
     }
 }
