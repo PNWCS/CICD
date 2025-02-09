@@ -56,7 +56,6 @@ jobs:
 	      echo "✅ Test coverage is 100%! Proceeding..."
 	    }
 
-
       - name: Upload Code Coverage Report
         uses: codecov/codecov-action@v3
         with:
