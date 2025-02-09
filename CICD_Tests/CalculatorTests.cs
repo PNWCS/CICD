@@ -21,7 +21,7 @@ namespace CICD_Tests
         [Fact]
         public void Divide_DivideByZeroException()
         {
-            Assert.Throws<DivideByZeroException>(()=>Calculator.Divide(1,0));
+            Assert.Throws<DivideByZeroException>(() => Calculator.Divide(1, 0));
         }
     }
 }
