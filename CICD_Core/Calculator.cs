@@ -11,7 +11,7 @@ namespace CICD_Core
             {
                 throw new DivideByZeroException("Cannot divide by zero");
             }
-            return v1/(double)v2;
+            return v1 / (double)v2;
         }
     }
 }
